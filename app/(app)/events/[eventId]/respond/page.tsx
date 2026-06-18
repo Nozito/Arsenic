@@ -235,21 +235,19 @@ export default async function RespondPage({
               return (
                 <div
                   key={c.id}
-                  className={`flex items-center gap-4 px-4 py-3 text-sm${i > 0 ? ' border-t' : ''}`}
+                  className={`flex items-start justify-between gap-3 px-4 py-3${i > 0 ? ' border-t' : ''}`}
                   style={i > 0 ? { borderColor: 'var(--color-border)' } : undefined}
                 >
-                  <span
-                    className="text-xs w-24 shrink-0 truncate"
-                    style={{ color: 'var(--color-text-faint)' }}
-                  >
-                    {c.contributor_name}
-                  </span>
-                  <span className="flex-1 font-medium truncate" style={{ color: 'var(--color-text)' }}>
-                    {c.name}
-                  </span>
-                  <span className="text-xs shrink-0 tabular" style={{ color: 'var(--color-text-faint)' }}>
-                    {c.quantity}
-                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium leading-snug" style={{ color: 'var(--color-text)' }}>
+                      {c.name}
+                    </p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-faint)' }}>
+                      {c.contributor_name}
+                      {c.quantity ? <span className="mx-1">·</span> : null}
+                      {c.quantity}
+                    </p>
+                  </div>
                   <ContributionLike
                     contributionId={c.id}
                     eventId={eventId}
