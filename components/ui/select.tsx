@@ -16,21 +16,26 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
     return (
       <div className="flex flex-col gap-1.5">
         {label && (
-          <label htmlFor={inputId} className="text-sm font-medium text-stone-700">
+          <label htmlFor={inputId} className="text-sm font-medium" style={{ color: 'var(--color-text-muted)' }}>
             {label}
-            {props.required && <span className="ml-1 text-stone-400">*</span>}
+            {props.required && <span className="ml-1" style={{ color: 'var(--color-text-faint)' }}>*</span>}
           </label>
         )}
         <select
           ref={ref}
           id={inputId}
           className={cn(
-            'h-10 w-full rounded-md border border-stone-200 bg-white px-3 text-sm text-stone-900 transition-colors appearance-none',
-            'focus:outline-none focus:ring-2 focus:ring-stone-900 focus:border-stone-900',
-            'disabled:cursor-not-allowed disabled:bg-stone-50',
+            'h-10 w-full rounded-[var(--radius-md)] border px-3 text-sm transition-colors appearance-none outline-none',
+            'focus:ring-2 focus:ring-[var(--color-accent)] focus:border-[var(--color-accent)]',
+            'disabled:cursor-not-allowed disabled:opacity-50',
             error && 'border-red-400 focus:ring-red-500',
             className
           )}
+          style={{
+            borderColor: error ? undefined : 'var(--color-border)',
+            background: 'var(--color-surface-elevated)',
+            color: 'var(--color-text)',
+          }}
           {...props}
         >
           {placeholder && <option value="">{placeholder}</option>}
@@ -41,7 +46,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
           ))}
         </select>
         {error && <p className="text-xs text-red-600">{error}</p>}
-        {hint && !error && <p className="text-xs text-stone-500">{hint}</p>}
+        {hint && !error && <p className="text-xs" style={{ color: 'var(--color-text-faint)' }}>{hint}</p>}
       </div>
     )
   }

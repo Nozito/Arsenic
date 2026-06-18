@@ -50,10 +50,10 @@ export function ContributionForm({
   }, [name, category, existingContributions, participantId])
 
   return (
-    <div className="rounded-[var(--radius-lg)] border border-stone-200 bg-white overflow-hidden">
+    <div className="rounded-[var(--radius-lg)] border overflow-hidden" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-elevated)' }}>
       {/* Header */}
-      <div className="px-5 py-3.5 border-b border-stone-100 bg-stone-50/60">
-        <p className="text-xs font-semibold text-stone-500 uppercase tracking-widest">Ajouter une contribution</p>
+      <div className="px-5 py-3.5 border-b" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-muted)' }}>
+        <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--color-text-faint)' }}>Ajouter une contribution</p>
       </div>
 
       <form action={action} className="px-5 py-4 flex flex-col gap-4">

@@ -141,7 +141,7 @@ export function CardStepper({
               className={cn(
                 'h-9 px-5 text-sm font-medium rounded-[var(--radius-md)]',
                 'bg-[var(--color-text)] text-[var(--color-surface-elevated)]',
-                'hover:bg-[var(--color-stone-800)]',
+                'hover:bg-[var(--color-text-muted)]',
                 'transition-ui disabled:opacity-40 disabled:pointer-events-none',
                 'active:scale-[0.98]',
                 'flex items-center gap-2'

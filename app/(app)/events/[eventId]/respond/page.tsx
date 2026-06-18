@@ -2,9 +2,7 @@ import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { PageWrapper, SectionHeader } from '@/components/layout/page-wrapper'
-import { RespondForm } from '@/components/events/respond-form'
-import { ContributionForm } from '@/components/contributions/contribution-form'
-import { ContributionsList } from '@/components/contributions/contributions-list'
+import { RespondStepper } from '@/components/events/respond-stepper'
 import { ContributionLike } from '@/components/contributions/contribution-like'
 import { EventComments } from '@/components/comments/event-comments'
 import { formatDate, formatTime } from '@/utils/invite'
@@ -15,6 +13,7 @@ import type {
   EventParticipant,
   ContributionReaction,
   EventComment,
+  Profile,
 } from '@/types'
 import type { ContributionSuggestion } from '@/components/contributions/contribution-form'
 
@@ -84,6 +83,7 @@ export default async function RespondPage({
     { data: allParticipantsRaw },
     { data: commentsRaw },
     { data: pastContribsRaw },
+    { data: profileRaw },
   ] = await Promise.all([
     supabase.from('participant_responses').select('*').eq('participant_id', participant.id).single(),
     supabase.from('contributions').select('*').eq('participant_id', participant.id).order('created_at', { ascending: false }),
@@ -94,26 +94,26 @@ export default async function RespondPage({
       .eq('event_id', eventId)
       .is('deleted_at', null)
       .order('created_at', { ascending: true }),
-    // Contributions passées de l'utilisateur (autres événements) pour suggestions
     supabase.from('contributions')
       .select('name, quantity, category, event_id')
-      .eq('event_participants.user_id', user.id)
       .not('event_id', 'eq', eventId)
       .order('created_at', { ascending: false })
       .limit(50),
+    supabase.from('profiles').select('*').eq('id', user.id).single(),
   ])
 
   const response         = responseRaw as ParticipantResponse | null
   const myContributions  = (myContributionsRaw ?? []) as Contribution[]
   const allContributions = (allContributionsRaw ?? []) as Contribution[]
+  const profile          = profileRaw as Profile | null
 
-  // Réactions : filtrées par les IDs de contributions déjà chargées
+  // Réactions
   const contributionIds = allContributions.map((c) => c.id)
   const { data: reactionsRaw } = contributionIds.length > 0
     ? await supabase.from('contribution_reactions').select('*').in('contribution_id', contributionIds)
     : { data: [] as ContributionReaction[] }
   const reactions = (reactionsRaw ?? []) as ContributionReaction[]
-  const comments         = (commentsRaw ?? []) as EventComment[]
+  const comments  = (commentsRaw ?? []) as EventComment[]
 
   const allParticipants = (allParticipantsRaw ?? []) as Array<{
     id: string
@@ -121,7 +121,7 @@ export default async function RespondPage({
     guest_name?: string | null
   }>
 
-  // Suggestions préremplies : top 3 par catégorie depuis les contributions passées
+  // Suggestions
   const pastContribs = (pastContribsRaw ?? []) as Array<{ name: string; quantity: string; category: string }>
   const suggestionsByCategory = pastContribs.reduce(
     (acc, c) => {
@@ -205,43 +205,21 @@ export default async function RespondPage({
         </div>
       )}
 
-      {/* Votre présence */}
+      {/* Stepper principal */}
       {!isClosed && (
         <section className="mb-8 animate-fade-in">
-          <SectionHeader title="Votre présence" />
-          <RespondForm
+          <RespondStepper
             eventId={eventId}
             participantId={participant.id}
-            plusOneEnabled={event.plus_one_enabled}
-            dietaryEnabled={event.dietary_enabled}
-            allergensEnabled={event.allergens_enabled}
+            event={event}
             existingResponse={response}
+            existingContributions={myContributions}
+            allContributions={contribsWithNames}
+            suggestions={suggestions}
+            profile={profile}
           />
         </section>
       )}
-
-      {/* Ce que j'apporte */}
-      <section className="mb-8 animate-fade-in" style={{ animationDelay: '60ms' }}>
-        <SectionHeader title="Ce que j'apporte" count={myContributions.length} />
-        {myContributions.length > 0 && (
-          <div className="mb-4">
-            <ContributionsList
-              contributions={myContributions}
-              eventId={eventId}
-              canDelete={!isClosed}
-            />
-          </div>
-        )}
-        {!isClosed && (
-          <ContributionForm
-            eventId={eventId}
-            participantId={participant.id}
-            enabledCategories={event.categories_enabled}
-            existingContributions={contribsWithNames}
-            suggestions={suggestions}
-          />
-        )}
-      </section>
 
       {/* Déjà prévu par les autres */}
       {othersContribs.length > 0 && (

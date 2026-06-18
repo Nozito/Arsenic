@@ -25,8 +25,8 @@ export function Stars({ score, max = 5, size = 'md', className }: StarsProps) {
           <span
             key={i}
             className={cn(
-              'h-1.5 rounded-full transition-ui',
-              i < score ? 'bg-stone-700 w-3.5' : 'bg-stone-200 w-3.5'
+              'h-1.5 rounded-full transition-ui w-3.5',
+              i < score ? 'bg-[var(--color-text)]' : 'bg-[var(--color-border)]'
             )}
           />
         ))}
@@ -43,13 +43,13 @@ export function Stars({ score, max = 5, size = 'md', className }: StarsProps) {
       aria-valuemax={max}
       aria-label={`${score} sur ${max}`}
     >
-      <div className="relative h-1.5 flex-1 bg-stone-100 rounded-full overflow-hidden min-w-16">
+      <div className="relative h-1.5 flex-1 rounded-full overflow-hidden min-w-16" style={{ background: 'var(--color-border)' }}>
         <div
-          className="absolute inset-y-0 left-0 bg-stone-700 rounded-full transition-all duration-500"
-          style={{ width: `${pct}%` }}
+          className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
+          style={{ width: `${pct}%`, background: 'var(--color-text)' }}
         />
       </div>
-      <span className="text-xs tabular text-stone-500 w-5 text-right shrink-0">{score}</span>
+      <span className="text-xs tabular w-5 text-right shrink-0" style={{ color: 'var(--color-text-faint)' }}>{score}</span>
     </div>
   )
 }

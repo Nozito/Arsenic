@@ -41,14 +41,14 @@ export function RespondForm({
   const [dietary, setDiet]    = useState<string[]>(existingResponse?.dietary_restrictions ?? [])
 
   return (
-    <form action={action} className="flex flex-col gap-0 divide-y divide-stone-100 rounded-[var(--radius-lg)] border border-stone-200 bg-white overflow-hidden">
+    <form action={action} className="flex flex-col gap-0 divide-y divide-[var(--color-border)] rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] overflow-hidden">
       <input type="hidden" name="event_id"      value={eventId} />
       <input type="hidden" name="participant_id" value={participantId} />
       <input type="hidden" name="status"         value={status} />
       <input type="hidden" name="headcount"      value={headcount} />
 
       {/* Sélecteur de statut */}
-      <div className="grid grid-cols-3 divide-x divide-stone-100">
+      <div className="grid grid-cols-3 divide-x divide-[var(--color-border)]">
         {STATUS_OPTIONS.map((opt) => {
           const isActive = status === opt.value
           return (
@@ -56,17 +56,18 @@ export function RespondForm({
               key={opt.value}
               type="button"
               onClick={() => setStatus(opt.value)}
+              aria-pressed={isActive}
               className={cn(
                 'flex flex-col items-center gap-1 py-4 px-3 text-center transition-colors',
                 isActive
-                  ? 'bg-stone-900 text-white'
-                  : 'bg-white hover:bg-stone-50 text-stone-700'
+                  ? 'bg-[var(--color-text)] text-[var(--color-surface-elevated)]'
+                  : 'bg-[var(--color-surface-elevated)] hover:bg-[var(--color-surface-muted)] text-[var(--color-text-muted)]'
               )}
             >
-              <span className={cn('text-sm font-semibold', isActive ? 'text-white' : 'text-stone-900')}>
+              <span className={cn('text-sm font-semibold', isActive ? 'text-[var(--color-surface-elevated)]' : 'text-[var(--color-text)]')}>
                 {opt.label}
               </span>
-              <span className={cn('text-xs leading-tight', isActive ? 'text-stone-400' : 'text-stone-400')}>
+              <span className="text-xs leading-tight text-[var(--color-text-faint)]">
                 {opt.sub}
               </span>
             </button>
@@ -91,7 +92,7 @@ export function RespondForm({
       {/* Allergènes */}
       {allergensEnabled && (
         <div className="px-5 py-4">
-          <p className="text-xs font-semibold text-stone-500 uppercase tracking-widest mb-3">Allergènes</p>
+          <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--color-text-faint)' }}>Allergènes</p>
           <ToggleGroup
             name="allergens"
             options={ALLERGEN_OPTIONS.map((a) => ({ value: a, label: a }))}
@@ -104,7 +105,7 @@ export function RespondForm({
       {/* Régimes */}
       {dietaryEnabled && (
         <div className="px-5 py-4">
-          <p className="text-xs font-semibold text-stone-500 uppercase tracking-widest mb-3">Régime alimentaire</p>
+          <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--color-text-faint)' }}>Régime alimentaire</p>
           <ToggleGroup
             name="dietary_restrictions"
             options={DIETARY_OPTIONS.map((d) => ({ value: d, label: d }))}
