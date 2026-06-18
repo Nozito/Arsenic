@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Claude Code memory
+/memory/
+
+# Supabase CLI temp files (contain project ref / connection strings)
+/supabase/.temp/
