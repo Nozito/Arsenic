@@ -447,13 +447,25 @@ function ContributionRow({
         </div>
       ) : (
         <>
-          <div className="flex items-center gap-3">
-            <span className="w-24 shrink-0 text-xs truncate" style={{ color: 'var(--color-text-faint)' }}>
+          <div className="flex items-start gap-3">
+            <span className="w-24 shrink-0 text-xs truncate pt-0.5" style={{ color: 'var(--color-text-faint)' }}>
               {contribution.contributor_name}
             </span>
-            <span className="flex-1 font-medium truncate" style={{ color: 'var(--color-text)' }}>
-              {contribution.name}
-            </span>
+            <div className="flex-1 min-w-0">
+              <span className="font-medium truncate block" style={{ color: 'var(--color-text)' }}>
+                {contribution.name}
+              </span>
+              {contribution.detail && (
+                <span className="text-xs truncate block" style={{ color: 'var(--color-text-faint)' }}>
+                  {contribution.detail}
+                </span>
+              )}
+              {contribution.note && (
+                <span className="text-xs truncate block italic" style={{ color: 'var(--color-text-faint)' }}>
+                  {contribution.note}
+                </span>
+              )}
+            </div>
             <span className="text-xs tabular shrink-0" style={{ color: 'var(--color-text-faint)' }}>
               {contribution.quantity}
             </span>
@@ -580,7 +592,7 @@ function ParticipantRow({
 
   // Presence form state
   const [status, setStatus] = useState<ResponseStatus>(p.response?.status ?? 'attending')
-  const [headcount, setHeadcount] = useState(String(p.response?.headcount ?? 1))
+  const [editHc, setEditHc] = useState(p.response?.headcount ?? 1)
   const [note, setNote] = useState(p.response?.note ?? '')
 
   // Add contribution form state
@@ -603,7 +615,7 @@ function ParticipantRow({
     fd.append('event_id', event.id)
     fd.append('participant_id', p.id)
     fd.append('status', status)
-    fd.append('headcount', headcount)
+    fd.append('headcount', String(editHc))
     fd.append('note', note)
     startTransition(async () => {
       const res = await updateParticipant({}, fd)
@@ -708,6 +720,14 @@ function ParticipantRow({
                   Co-org
                 </span>
               )}
+              {(p as any).added_by_organizer && (
+                <span
+                  className="text-xs px-1.5 py-0.5 rounded-[var(--radius-xs)] font-medium"
+                  style={{ background: 'var(--color-surface-muted)', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)' }}
+                >
+                  Manuel
+                </span>
+              )}
             </div>
             {contribs.length > 0 && (
               <p className="mt-0.5 text-xs truncate" style={{ color: 'var(--color-text-faint)' }}>
@@ -759,8 +779,46 @@ function ParticipantRow({
           className="px-4 pb-4 sm:px-5 flex flex-col gap-4 border-t"
           style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-muted)' }}
         >
+          {/* Infos participant */}
+          {(p.guest_email || p.joined_at || p.response?.note || (p.response as any)?.is_manual) && (
+            <div className="pt-3 flex flex-col gap-1.5">
+              {p.guest_email && (
+                <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                  <svg className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--color-text-faint)' }} viewBox="0 0 16 16" fill="none" aria-hidden>
+                    <rect x="2" y="4" width="12" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+                    <path d="M2 6l6 4 6-4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                  </svg>
+                  <span>{p.guest_email}</span>
+                </div>
+              )}
+              {p.joined_at && (
+                <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                  <svg className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--color-text-faint)' }} viewBox="0 0 16 16" fill="none" aria-hidden>
+                    <rect x="1.5" y="3" width="13" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+                    <path d="M5 3V2M11 3V2M1.5 7h13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                  </svg>
+                  <span>Inscrit le {new Date(p.joined_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                </div>
+              )}
+              {(p.response as any)?.is_manual && (
+                <p className="text-xs" style={{ color: 'var(--color-text-faint)' }}>
+                  Réponse saisie manuellement
+                </p>
+              )}
+              {p.response?.note && (
+                <div
+                  className="mt-1 rounded-[var(--radius-sm)] px-3 py-2 text-xs"
+                  style={{ background: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}
+                >
+                  <span className="font-medium" style={{ color: 'var(--color-text-faint)' }}>Note : </span>
+                  {p.response.note}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Section Présence */}
-          <div className="pt-3">
+          <div className={p.guest_email || p.joined_at || p.response?.note || (p.response as any)?.is_manual ? '' : 'pt-3'}>
             <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--color-text-faint)' }}>
               Présence
             </p>
@@ -777,15 +835,15 @@ function ParticipantRow({
                   <option value="not_attending">Absent</option>
                   <option value="pending">En attente</option>
                 </select>
-                <input
-                  type="number"
-                  min={1}
-                  value={headcount}
-                  onChange={(e) => setHeadcount(e.target.value)}
-                  className="h-8 w-20 px-2 text-sm rounded-[var(--radius-sm)] border"
-                  style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
-                  placeholder="Nb"
-                />
+                <div className="flex items-center gap-3">
+                  <button type="button" onClick={() => setEditHc(Math.max(1, editHc - 1))}
+                    className="h-8 w-8 rounded-[var(--radius-sm)] border flex items-center justify-center text-lg"
+                    style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>−</button>
+                  <span className="w-8 text-center text-sm font-semibold tabular" style={{ color: 'var(--color-text)' }}>{editHc}</span>
+                  <button type="button" onClick={() => setEditHc(Math.min(20, editHc + 1))}
+                    className="h-8 w-8 rounded-[var(--radius-sm)] border flex items-center justify-center text-lg"
+                    style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>+</button>
+                </div>
               </div>
               <textarea
                 value={note}
@@ -822,12 +880,24 @@ function ParticipantRow({
                 {contribs.map((c, i) => (
                   <div
                     key={c.id}
-                    className={cn('flex items-center gap-2 px-3 py-2 text-xs', i > 0 && 'border-t')}
+                    className={cn('flex items-start gap-2 px-3 py-2 text-xs', i > 0 && 'border-t')}
                     style={i > 0 ? { borderColor: 'var(--color-border)' } : undefined}
                   >
-                    <span className="flex-1 truncate font-medium" style={{ color: 'var(--color-text)' }}>
-                      {c.name}
-                    </span>
+                    <div className="flex-1 min-w-0">
+                      <span className="truncate font-medium block" style={{ color: 'var(--color-text)' }}>
+                        {c.name}
+                      </span>
+                      {c.detail && (
+                        <span className="truncate block" style={{ color: 'var(--color-text-faint)' }}>
+                          {c.detail}
+                        </span>
+                      )}
+                      {c.note && (
+                        <span className="truncate block italic" style={{ color: 'var(--color-text-faint)' }}>
+                          {c.note}
+                        </span>
+                      )}
+                    </div>
                     <span style={{ color: 'var(--color-text-faint)' }}>{c.quantity}</span>
                     <span
                       className="px-1.5 py-0.5 rounded-[var(--radius-xs)]"

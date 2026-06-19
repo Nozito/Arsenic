@@ -166,14 +166,18 @@ export function RespondStepper({
 
       {(status === 'attending' || status === 'maybe') && event.plus_one_enabled && (
         <div className="mt-1">
-          <Input
-            label="Combien de personnes ? (vous inclus)"
-            type="number"
-            min="1"
-            max="20"
-            value={headcount}
-            onChange={(e) => setHc(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
-          />
+          <p className="text-xs font-medium mb-2" style={{ color: 'var(--color-text-muted)' }}>
+            Combien de personnes ? (vous inclus)
+          </p>
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={() => setHc(Math.max(1, headcount - 1))}
+              className="h-8 w-8 rounded-[var(--radius-sm)] border flex items-center justify-center text-lg"
+              style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>−</button>
+            <span className="w-8 text-center text-sm font-semibold tabular" style={{ color: 'var(--color-text)' }}>{headcount}</span>
+            <button type="button" onClick={() => setHc(Math.min(20, headcount + 1))}
+              className="h-8 w-8 rounded-[var(--radius-sm)] border flex items-center justify-center text-lg"
+              style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>+</button>
+          </div>
         </div>
       )}
     </div>
@@ -499,12 +503,6 @@ export function RespondStepper({
       {submitError && (
         <Alert variant="error">{submitError}</Alert>
       )}
-
-      {submitted && (
-        <Alert variant="success">
-          {isUpdate ? 'Votre réponse a été mise à jour.' : 'Votre réponse a été enregistrée.'}
-        </Alert>
-      )}
     </div>
   )
 
@@ -544,23 +542,34 @@ export function RespondStepper({
     })
   }
 
-  const isNoteStep = steps[currentStep]?.id === 'note'
-
-  const confirmedButton = (
-    <div
-      className="flex items-center gap-2 h-11 px-6 text-sm font-medium rounded-[var(--radius-md)] border"
-      style={{
-        borderColor: 'var(--color-accent)',
-        background: 'var(--color-accent-muted)',
-        color: 'var(--color-accent)',
-      }}
-    >
-      <svg className="h-4 w-4 shrink-0" viewBox="0 0 16 16" fill="none" aria-hidden>
-        <path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-      {isUpdate ? 'Réponse mise à jour' : 'Réponse confirmée'}
-    </div>
-  )
+  if (submitted) {
+    return (
+      <div className="rounded-[var(--radius-xl)] border overflow-hidden"
+        style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-elevated)' }}>
+        <div className="px-6 py-10 flex flex-col items-center text-center gap-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full"
+            style={{ background: 'var(--color-accent-muted)' }}>
+            <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <path d="M5 13l4 4L19 7" stroke="var(--color-accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-base font-semibold mb-1" style={{ color: 'var(--color-text)' }}>
+              {isUpdate ? 'Réponse mise à jour' : 'Réponse confirmée'}
+            </p>
+            <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+              {status === 'attending' ? 'On compte sur vous !' : status === 'maybe' ? 'On espère vous voir.' : 'Merci de nous avoir prévenu.'}
+            </p>
+          </div>
+          <button type="button" onClick={() => setSubmitted(false)}
+            className="text-sm transition-ui"
+            style={{ color: 'var(--color-text-faint)' }}>
+            Modifier ma réponse
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <CardStepper
@@ -568,14 +577,13 @@ export function RespondStepper({
       currentStep={currentStep}
       direction={direction}
       onNext={isLastStep ? handleSubmit : goNext}
-      onPrev={currentStep === 0 ? () => {} : (isNoteStep ? goNext : goPrev)}
-      prevLabel={isNoteStep ? 'Passer' : 'Retour'}
+      onPrev={currentStep === 0 ? () => {} : goPrev}
+      prevLabel="Retour"
       nextLabel={isLastStep ? undefined : 'Continuer'}
       isLastStep={isLastStep}
       submitLabel={isUpdate ? 'Mettre à jour' : 'Confirmer ma réponse'}
       isSubmitting={isPending}
       nextDisabled={false}
-      submitButton={submitted ? confirmedButton : undefined}
     />
   )
 }
