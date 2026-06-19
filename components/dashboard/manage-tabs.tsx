@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { Stars } from '@/components/ui/stars'
 import { Badge } from '@/components/ui/badge'
 import { InlineConfirm } from '@/components/ui/inline-confirm'
@@ -8,7 +9,14 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { ShareBlock } from '@/components/ui/share-block'
 import { EventEditPanel } from '@/components/dashboard/event-edit-panel'
 import { useToast } from '@/components/ui/toast'
-import { removeParticipant } from '@/features/events/organizer-actions'
+import {
+  removeParticipant,
+  updateParticipant,
+  addContributionAsOrganizer,
+  deleteContributionAsOrganizer,
+  updateContribution,
+  setCoOrganizer,
+} from '@/features/events/organizer-actions'
 import { buildInviteUrl, formatDate } from '@/utils/invite'
 import { computeReadinessScore, computeCategoryCoverage } from '@/utils/readiness'
 import { groupDuplicates } from '@/utils/duplicates'
@@ -21,6 +29,8 @@ import type {
   EventComment,
   CategoryCoverage,
   DuplicateWarning,
+  ContributionCategory,
+  ResponseStatus,
 } from '@/types'
 import { cn } from '@/utils/cn'
 
@@ -40,9 +50,10 @@ interface ManageTabsProps {
   participants: ParticipantWithResponseAndContributions[]
   stats: DashboardStats
   comments: EventComment[]
+  isOrganizer: boolean
 }
 
-export function ManageTabs({ event, participants, stats, comments }: ManageTabsProps) {
+export function ManageTabs({ event, participants, stats, comments, isOrganizer }: ManageTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>('synthese')
   const allContribs: Contribution[] = participants.flatMap((p) => p.contributions)
   const attending = participants.filter((p) => p.response?.status === 'attending')
@@ -109,7 +120,7 @@ export function ManageTabs({ event, participants, stats, comments }: ManageTabsP
           <ContributionsTab event={event} contribsWithNames={contribsWithNames} coverage={coverage} duplicates={duplicates} />
         )}
         {activeTab === 'participants' && (
-          <ParticipantsTab event={event} participants={participants} />
+          <ParticipantsTab event={event} participants={participants} isOrganizer={isOrganizer} />
         )}
         {activeTab === 'allergenes' && (
           <AllergenesTab participants={participants} />
@@ -226,6 +237,8 @@ function SyntheseTab({ event, stats, readiness, coverage }: {
   )
 }
 
+// ---- ContributionsTab — with inline edit + delete ----
+
 function ContributionsTab({ event, contribsWithNames, coverage, duplicates }: {
   event: Event
   contribsWithNames: Array<Contribution & { contributor_name: string }>
@@ -289,24 +302,14 @@ function ContributionsTab({ event, contribsWithNames, coverage, duplicates }: {
           {activeContribs.map((c, i) => {
             const isDup = activeDups.some((d) => d.normalized.includes(c.name.toLowerCase()))
             return (
-              <div
+              <ContributionRow
                 key={c.id}
-                className={cn('flex items-center gap-3 px-4 py-3 text-sm', i > 0 && 'border-t')}
-                style={i > 0 ? { borderColor: 'var(--color-border)' } : undefined}
-              >
-                <span className="w-24 shrink-0 text-xs truncate" style={{ color: 'var(--color-text-faint)' }}>
-                  {c.contributor_name}
-                </span>
-                <span className="flex-1 font-medium truncate" style={{ color: 'var(--color-text)' }}>
-                  {c.name}
-                </span>
-                <span className="text-xs tabular shrink-0" style={{ color: 'var(--color-text-faint)' }}>
-                  {c.quantity}
-                </span>
-                {isDup && (
-                  <Badge variant="warning">doublon</Badge>
-                )}
-              </div>
+                contribution={c}
+                eventId={event.id}
+                isDup={isDup}
+                isFirst={i === 0}
+                categoryOptions={categoryOptions}
+              />
             )
           })}
         </div>
@@ -315,14 +318,174 @@ function ContributionsTab({ event, contribsWithNames, coverage, duplicates }: {
   )
 }
 
-function ParticipantsTab({ event, participants }: {
-  event: Event
-  participants: ParticipantWithResponseAndContributions[]
+function ContributionRow({
+  contribution,
+  eventId,
+  isDup,
+  isFirst,
+  categoryOptions,
+}: {
+  contribution: Contribution & { contributor_name: string }
+  eventId: string
+  isDup: boolean
+  isFirst: boolean
+  categoryOptions: { value: ContributionCategory; label: string }[]
 }) {
-  const [filter, setFilter] = useState<'all' | 'attending' | 'not_attending' | 'pending'>('all')
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [confirmDel, setConfirmDel] = useState(false)
+  const [editName, setEditName] = useState(contribution.name)
+  const [editQty, setEditQty] = useState(contribution.quantity)
+  const [editCat, setEditCat] = useState<ContributionCategory>(contribution.category)
   const [isPending, startTransition] = useTransition()
   const { toast } = useToast()
+  const router = useRouter()
+
+  function handleUpdate() {
+    const fd = new FormData()
+    fd.append('event_id', eventId)
+    fd.append('contribution_id', contribution.id)
+    fd.append('name', editName)
+    fd.append('quantity', editQty)
+    fd.append('category', editCat)
+    startTransition(async () => {
+      const res = await updateContribution({}, fd)
+      if (res.error) {
+        toast(res.error, 'error')
+      } else {
+        toast('Contribution modifiée.', 'success')
+        setEditing(false)
+        router.refresh()
+      }
+    })
+  }
+
+  function handleDelete() {
+    startTransition(async () => {
+      const res = await deleteContributionAsOrganizer(contribution.id, eventId)
+      if (res.error) {
+        toast(res.error, 'error')
+      } else {
+        toast('Contribution supprimée.', 'info')
+        router.refresh()
+      }
+    })
+  }
+
+  return (
+    <div
+      className={cn('px-4 py-3 text-sm', !isFirst && 'border-t')}
+      style={!isFirst ? { borderColor: 'var(--color-border)' } : undefined}
+    >
+      {editing ? (
+        <div className="flex flex-col gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <input
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              className="flex-1 min-w-0 h-8 px-2 text-sm rounded-[var(--radius-sm)] border"
+              style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
+              placeholder="Nom"
+            />
+            <input
+              value={editQty}
+              onChange={(e) => setEditQty(e.target.value)}
+              className="w-24 h-8 px-2 text-sm rounded-[var(--radius-sm)] border"
+              style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
+              placeholder="Qté"
+            />
+            <select
+              value={editCat}
+              onChange={(e) => setEditCat(e.target.value as ContributionCategory)}
+              className="h-8 px-2 text-sm rounded-[var(--radius-sm)] border"
+              style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
+            >
+              {categoryOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleUpdate}
+              disabled={isPending}
+              className="h-7 px-3 text-xs font-medium rounded-[var(--radius-sm)] transition-ui"
+              style={{ background: 'var(--color-accent)', color: '#fff' }}
+            >
+              {isPending ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEditing(false)
+                setEditName(contribution.name)
+                setEditQty(contribution.quantity)
+                setEditCat(contribution.category)
+              }}
+              className="h-7 px-3 text-xs font-medium rounded-[var(--radius-sm)] border transition-ui"
+              style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
+            >
+              Annuler
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center gap-3">
+            <span className="w-24 shrink-0 text-xs truncate" style={{ color: 'var(--color-text-faint)' }}>
+              {contribution.contributor_name}
+            </span>
+            <span className="flex-1 font-medium truncate" style={{ color: 'var(--color-text)' }}>
+              {contribution.name}
+            </span>
+            <span className="text-xs tabular shrink-0" style={{ color: 'var(--color-text-faint)' }}>
+              {contribution.quantity}
+            </span>
+            {isDup && <Badge variant="warning">doublon</Badge>}
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="shrink-0 h-6 px-2 text-xs rounded-[var(--radius-sm)] border transition-ui"
+              style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
+            >
+              Modifier
+            </button>
+            {!confirmDel && (
+              <button
+                type="button"
+                onClick={() => setConfirmDel(true)}
+                className="shrink-0 h-6 w-6 flex items-center justify-center rounded-[var(--radius-sm)] hover:bg-red-50 transition-ui"
+                aria-label="Supprimer"
+              >
+                <svg className="h-3 w-3" style={{ color: 'var(--color-text-faint)' }} viewBox="0 0 12 12" fill="none" aria-hidden>
+                  <path d="M2 3h8M4.5 3V2h3v1M5 5v4M7 5v4M2 3l.5 7h7l.5-7" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            )}
+          </div>
+          {confirmDel && (
+            <div className="mt-2 ml-24">
+              <InlineConfirm
+                message="Supprimer cette contribution ?"
+                onCancel={() => setConfirmDel(false)}
+                onConfirm={handleDelete}
+              />
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ---- ParticipantsTab — with expandable row ----
+
+function ParticipantsTab({ event, participants, isOrganizer }: {
+  event: Event
+  participants: ParticipantWithResponseAndContributions[]
+  isOrganizer: boolean
+}) {
+  const [filter, setFilter] = useState<'all' | 'attending' | 'not_attending' | 'pending'>('all')
 
   const filtered = participants.filter((p) => {
     if (filter === 'all') return true
@@ -338,18 +501,6 @@ function ParticipantsTab({ event, participants }: {
     { id: 'not_attending',label: 'Absents',    count: participants.filter((p) => p.response?.status === 'not_attending').length },
     { id: 'pending',      label: 'En attente', count: participants.filter((p) => !p.response).length },
   ]
-
-  function handleDelete(participantId: string) {
-    startTransition(async () => {
-      const res = await removeParticipant(participantId, event.id)
-      if (res.error) {
-        toast(res.error, 'error')
-      } else {
-        toast('Participant supprimé.', 'info')
-        setConfirmDelete(null)
-      }
-    })
-  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -379,88 +530,411 @@ function ParticipantsTab({ event, participants }: {
           className="rounded-[var(--radius-lg)] border overflow-hidden"
           style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-elevated)' }}
         >
-          {filtered.map((p, i) => {
-            const name = p.profile?.display_name ?? p.profile?.first_name ?? p.guest_name ?? 'Invité'
-            const status = p.response?.status ?? 'pending'
-            const contribs = p.contributions ?? []
+          {filtered.map((p, i) => (
+            <ParticipantRow
+              key={p.id}
+              participant={p}
+              event={event}
+              isFirst={i === 0}
+              isOrganizer={isOrganizer}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
-            return (
+function ParticipantRow({
+  participant: p,
+  event,
+  isFirst,
+  isOrganizer,
+}: {
+  participant: ParticipantWithResponseAndContributions
+  event: Event
+  isFirst: boolean
+  isOrganizer: boolean
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [isPending, startTransition] = useTransition()
+  const { toast } = useToast()
+  const router = useRouter()
+
+  // Presence form state
+  const [status, setStatus] = useState<ResponseStatus>(p.response?.status ?? 'attending')
+  const [headcount, setHeadcount] = useState(String(p.response?.headcount ?? 1))
+  const [note, setNote] = useState(p.response?.note ?? '')
+
+  // Add contribution form state
+  const [addName, setAddName] = useState('')
+  const [addQty, setAddQty] = useState('')
+  const [addCat, setAddCat] = useState<ContributionCategory>(event.categories_enabled[0] ?? 'autre')
+  const [confirmDelContrib, setConfirmDelContrib] = useState<string | null>(null)
+
+  const name = p.profile?.display_name ?? p.profile?.first_name ?? p.guest_name ?? 'Invité'
+  const statusValue = p.response?.status ?? 'pending'
+  const contribs = p.contributions ?? []
+  const isEventOrganizer = p.user_id === event.organizer_id
+
+  const categoryOptions = CONTRIBUTION_CATEGORIES.filter((c) =>
+    event.categories_enabled.includes(c.value)
+  )
+
+  function handleUpdatePresence() {
+    const fd = new FormData()
+    fd.append('event_id', event.id)
+    fd.append('participant_id', p.id)
+    fd.append('status', status)
+    fd.append('headcount', headcount)
+    fd.append('note', note)
+    startTransition(async () => {
+      const res = await updateParticipant({}, fd)
+      if (res.error) {
+        toast(res.error, 'error')
+      } else {
+        toast('Présence mise à jour.', 'success')
+        router.refresh()
+      }
+    })
+  }
+
+  function handleDeleteContrib(contributionId: string) {
+    startTransition(async () => {
+      const res = await deleteContributionAsOrganizer(contributionId, event.id)
+      if (res.error) {
+        toast(res.error, 'error')
+      } else {
+        toast('Contribution supprimée.', 'info')
+        setConfirmDelContrib(null)
+        router.refresh()
+      }
+    })
+  }
+
+  function handleAddContrib() {
+    if (!addName || !addQty) return
+    const fd = new FormData()
+    fd.append('event_id', event.id)
+    fd.append('participant_id', p.id)
+    fd.append('name', addName)
+    fd.append('quantity', addQty)
+    fd.append('category', addCat)
+    startTransition(async () => {
+      const res = await addContributionAsOrganizer({}, fd)
+      if (res.error) {
+        toast(res.error, 'error')
+      } else {
+        toast('Contribution ajoutée.', 'success')
+        setAddName('')
+        setAddQty('')
+        router.refresh()
+      }
+    })
+  }
+
+  function handleRemove() {
+    startTransition(async () => {
+      const res = await removeParticipant(p.id, event.id)
+      if (res.error) {
+        toast(res.error, 'error')
+      } else {
+        toast('Participant retiré.', 'info')
+        router.refresh()
+      }
+    })
+  }
+
+  function handleToggleCoOrg() {
+    const newValue = !p.is_co_organizer
+    startTransition(async () => {
+      const res = await setCoOrganizer(p.id, event.id, newValue)
+      if (res.error) {
+        toast(res.error, 'error')
+      } else {
+        toast(newValue ? 'Co-organisateur ajouté.' : 'Rôle retiré.', 'success')
+        router.refresh()
+      }
+    })
+  }
+
+  return (
+    <div
+      className={cn('', !isFirst && 'border-t')}
+      style={!isFirst ? { borderColor: 'var(--color-border)' } : undefined}
+    >
+      {/* Row header — always visible */}
+      <div className="px-4 py-3 sm:px-5">
+        <div className="flex items-center gap-3">
+          <span
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold select-none"
+            style={{ background: 'var(--color-surface-muted)', color: 'var(--color-text-muted)' }}
+            aria-hidden
+          >
+            {name.charAt(0).toUpperCase()}
+          </span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-medium truncate" style={{ color: 'var(--color-text)' }}>
+                {name}
+              </span>
+              {p.response?.headcount && p.response.headcount > 1 && (
+                <span className="text-xs" style={{ color: 'var(--color-text-faint)' }}>
+                  × {p.response.headcount}
+                </span>
+              )}
+              {p.is_co_organizer && (
+                <span
+                  className="text-xs px-1.5 py-0.5 rounded-[var(--radius-xs)] font-medium"
+                  style={{ background: 'var(--color-accent-muted)', color: 'var(--color-accent)' }}
+                >
+                  Co-org
+                </span>
+              )}
+            </div>
+            {contribs.length > 0 && (
+              <p className="mt-0.5 text-xs truncate" style={{ color: 'var(--color-text-faint)' }}>
+                {contribs.map((c) => c.name).join(' · ')}
+              </p>
+            )}
+          </div>
+          <StatusBadge status={statusValue} />
+          <button
+            type="button"
+            onClick={() => setExpanded(!expanded)}
+            className="shrink-0 h-7 w-7 flex items-center justify-center rounded-[var(--radius-sm)] border transition-ui"
+            style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
+            aria-label={expanded ? 'Réduire' : 'Modifier'}
+          >
+            <svg
+              className={cn('h-3 w-3 transition-transform', expanded && 'rotate-180')}
+              viewBox="0 0 12 12"
+              fill="none"
+              aria-hidden
+            >
+              <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Allergènes / régimes */}
+        {(p.response?.allergens?.length || p.response?.dietary_restrictions?.length) ? (
+          <div className="mt-2 ml-10 flex flex-wrap gap-1">
+            {(p.response?.allergens ?? []).map((a) => (
+              <span key={a} className="text-xs px-1.5 py-0.5 rounded-[var(--radius-xs)] border"
+                style={{ background: '#fef2f2', color: '#dc2626', borderColor: '#fecaca' }}>
+                {a}
+              </span>
+            ))}
+            {(p.response?.dietary_restrictions ?? []).map((d) => (
+              <span key={d} className="text-xs px-1.5 py-0.5 rounded-[var(--radius-xs)] border"
+                style={{ background: '#f0f9ff', color: '#0369a1', borderColor: '#bae6fd' }}>
+                {d}
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      {/* Expanded panel */}
+      {expanded && (
+        <div
+          className="px-4 pb-4 sm:px-5 flex flex-col gap-4 border-t"
+          style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-muted)' }}
+        >
+          {/* Section Présence */}
+          <div className="pt-3">
+            <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--color-text-faint)' }}>
+              Présence
+            </p>
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-2 flex-wrap">
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as ResponseStatus)}
+                  className="h-8 px-2 text-sm rounded-[var(--radius-sm)] border flex-1 min-w-[140px]"
+                  style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
+                >
+                  <option value="attending">Présent</option>
+                  <option value="maybe">Peut-être</option>
+                  <option value="not_attending">Absent</option>
+                  <option value="pending">En attente</option>
+                </select>
+                <input
+                  type="number"
+                  min={1}
+                  value={headcount}
+                  onChange={(e) => setHeadcount(e.target.value)}
+                  className="h-8 w-20 px-2 text-sm rounded-[var(--radius-sm)] border"
+                  style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
+                  placeholder="Nb"
+                />
+              </div>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={2}
+                className="w-full px-2 py-1.5 text-sm rounded-[var(--radius-sm)] border resize-none"
+                style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
+                placeholder="Note (optionnel)"
+              />
+              <div>
+                <button
+                  type="button"
+                  onClick={handleUpdatePresence}
+                  disabled={isPending}
+                  className="h-8 px-4 text-xs font-medium rounded-[var(--radius-sm)] transition-ui"
+                  style={{ background: 'var(--color-accent)', color: '#fff' }}
+                >
+                  {isPending ? 'Enregistrement…' : 'Enregistrer'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Section Contributions */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--color-text-faint)' }}>
+              Contributions
+            </p>
+            {contribs.length > 0 ? (
               <div
-                key={p.id}
-                className={cn('px-4 py-3 sm:px-5', i > 0 && 'border-t')}
-                style={i > 0 ? { borderColor: 'var(--color-border)' } : undefined}
+                className="rounded-[var(--radius-md)] border overflow-hidden mb-2"
+                style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-elevated)' }}
               >
-                <div className="flex items-center gap-3">
-                  <span
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold select-none"
-                    style={{ background: 'var(--color-surface-muted)', color: 'var(--color-text-muted)' }}
-                    aria-hidden
+                {contribs.map((c, i) => (
+                  <div
+                    key={c.id}
+                    className={cn('flex items-center gap-2 px-3 py-2 text-xs', i > 0 && 'border-t')}
+                    style={i > 0 ? { borderColor: 'var(--color-border)' } : undefined}
                   >
-                    {name.charAt(0).toUpperCase()}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium truncate" style={{ color: 'var(--color-text)' }}>
-                        {name}
-                      </span>
-                      {p.response?.headcount && p.response.headcount > 1 && (
-                        <span className="text-xs" style={{ color: 'var(--color-text-faint)' }}>
-                          × {p.response.headcount}
-                        </span>
-                      )}
-                    </div>
-                    {contribs.length > 0 && (
-                      <p className="mt-0.5 text-xs truncate" style={{ color: 'var(--color-text-faint)' }}>
-                        {contribs.map((c) => c.name).join(' · ')}
-                      </p>
+                    <span className="flex-1 truncate font-medium" style={{ color: 'var(--color-text)' }}>
+                      {c.name}
+                    </span>
+                    <span style={{ color: 'var(--color-text-faint)' }}>{c.quantity}</span>
+                    <span
+                      className="px-1.5 py-0.5 rounded-[var(--radius-xs)]"
+                      style={{ background: 'var(--color-surface-muted)', color: 'var(--color-text-muted)' }}
+                    >
+                      {CONTRIBUTION_CATEGORIES.find((cat) => cat.value === c.category)?.label ?? c.category}
+                    </span>
+                    {confirmDelContrib === c.id ? (
+                      <InlineConfirm
+                        message="Supprimer ?"
+                        onCancel={() => setConfirmDelContrib(null)}
+                        onConfirm={() => handleDeleteContrib(c.id)}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDelContrib(c.id)}
+                        className="shrink-0 h-5 w-5 flex items-center justify-center rounded-[var(--radius-xs)] hover:bg-red-50 transition-ui"
+                        aria-label={`Supprimer ${c.name}`}
+                      >
+                        <svg className="h-3 w-3" style={{ color: 'var(--color-text-faint)' }} viewBox="0 0 12 12" fill="none" aria-hidden>
+                          <path d="M2 3h8M4.5 3V2h3v1M5 5v4M7 5v4M2 3l.5 7h7l.5-7" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </button>
                     )}
                   </div>
-                  <StatusBadge status={status} />
-                  {confirmDelete === p.id ? null : (
-                    <button
-                      type="button"
-                      onClick={() => setConfirmDelete(p.id)}
-                      className="shrink-0 h-7 w-7 flex items-center justify-center rounded-[var(--radius-sm)] hover:bg-red-50 transition-ui"
-                      aria-label={`Supprimer ${name}`}
-                    >
-                      <svg className="h-3 w-3 text-[var(--color-text-faint)]" viewBox="0 0 12 12" fill="none" aria-hidden>
-                        <path d="M2 3h8M4.5 3V2h3v1M5 5v4M7 5v4M2 3l.5 7h7l.5-7" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-
-                {/* Allergènes / régimes */}
-                {(p.response?.allergens?.length || p.response?.dietary_restrictions?.length) ? (
-                  <div className="mt-2 ml-10 flex flex-wrap gap-1">
-                    {(p.response?.allergens ?? []).map((a) => (
-                      <span key={a} className="text-xs px-1.5 py-0.5 rounded-[var(--radius-xs)] border"
-                        style={{ background: '#fef2f2', color: '#dc2626', borderColor: '#fecaca' }}>
-                        {a}
-                      </span>
-                    ))}
-                    {(p.response?.dietary_restrictions ?? []).map((d) => (
-                      <span key={d} className="text-xs px-1.5 py-0.5 rounded-[var(--radius-xs)] border"
-                        style={{ background: '#f0f9ff', color: '#0369a1', borderColor: '#bae6fd' }}>
-                        {d}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-
-                {/* Confirmation suppression inline */}
-                {confirmDelete === p.id && (
-                  <div className="mt-2 ml-10">
-                    <InlineConfirm
-                      message="Supprimer ce participant ?"
-                      onCancel={() => setConfirmDelete(null)}
-                      onConfirm={() => handleDelete(p.id)}
-                    />
-                  </div>
-                )}
+                ))}
               </div>
-            )
-          })}
+            ) : (
+              <p className="text-xs mb-2" style={{ color: 'var(--color-text-faint)' }}>
+                Aucune contribution pour ce participant.
+              </p>
+            )}
+
+            {/* Formulaire ajout contribution */}
+            <div className="flex gap-2 flex-wrap">
+              <input
+                value={addName}
+                onChange={(e) => setAddName(e.target.value)}
+                className="flex-1 min-w-[120px] h-7 px-2 text-xs rounded-[var(--radius-sm)] border"
+                style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
+                placeholder="Nom"
+              />
+              <input
+                value={addQty}
+                onChange={(e) => setAddQty(e.target.value)}
+                className="w-20 h-7 px-2 text-xs rounded-[var(--radius-sm)] border"
+                style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
+                placeholder="Qté"
+              />
+              <select
+                value={addCat}
+                onChange={(e) => setAddCat(e.target.value as ContributionCategory)}
+                className="h-7 px-2 text-xs rounded-[var(--radius-sm)] border"
+                style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
+              >
+                {categoryOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleAddContrib}
+                disabled={isPending || !addName || !addQty}
+                className="h-7 px-3 text-xs font-medium rounded-[var(--radius-sm)] border transition-ui disabled:opacity-40"
+                style={{ borderColor: 'var(--color-accent)', color: 'var(--color-accent)' }}
+              >
+                + Ajouter
+              </button>
+            </div>
+          </div>
+
+          {/* Section Rôle — seulement si le participant est authentifié, non-organisateur, et qu'on est l'organisateur principal */}
+          {isOrganizer && p.user_id && !isEventOrganizer && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--color-text-faint)' }}>
+                Rôle
+              </p>
+              <div className="flex items-center gap-3">
+                {p.is_co_organizer && (
+                  <span
+                    className="text-xs px-2 py-1 rounded-[var(--radius-xs)] font-medium"
+                    style={{ background: 'var(--color-accent-muted)', color: 'var(--color-accent)' }}
+                  >
+                    Co-organisateur
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={handleToggleCoOrg}
+                  disabled={isPending}
+                  className="h-7 px-3 text-xs font-medium rounded-[var(--radius-sm)] border transition-ui"
+                  style={
+                    p.is_co_organizer
+                      ? { borderColor: '#fecaca', color: '#dc2626', background: '#fef2f2' }
+                      : { borderColor: 'var(--color-accent)', color: 'var(--color-accent)' }
+                  }
+                >
+                  {p.is_co_organizer ? 'Rétrograder' : 'Promouvoir co-organisateur'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Bouton retirer */}
+          <div className="pt-1 border-t" style={{ borderColor: 'var(--color-border)' }}>
+            {confirmDelete ? (
+              <InlineConfirm
+                message="Retirer ce participant ? Toutes ses contributions seront supprimées."
+                onCancel={() => setConfirmDelete(false)}
+                onConfirm={handleRemove}
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="h-7 px-3 text-xs font-medium rounded-[var(--radius-sm)] transition-ui"
+                style={{ color: '#dc2626', background: '#fef2f2' }}
+              >
+                Retirer ce participant
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

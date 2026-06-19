@@ -126,6 +126,7 @@ export interface EventParticipant {
   guest_name: string | null
   guest_email: string | null
   joined_at: string
+  is_co_organizer: boolean
 }
 
 export interface EventParticipantInsert {
@@ -133,6 +134,7 @@ export interface EventParticipantInsert {
   user_id?: string | null
   guest_name?: string | null
   guest_email?: string | null
+  is_co_organizer?: boolean
 }
 
 export interface ParticipantResponse {

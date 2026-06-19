@@ -35,6 +35,7 @@ export interface RespondStepperProps {
   allContributions: Array<Contribution & { contributor_name: string }>
   suggestions: ContributionSuggestion[]
   profile: Profile | null
+  statusCounts?: Record<string, number>
 }
 
 const STATUS_OPTIONS: { value: ResponseStatus; label: string; sub: string }[] = [
@@ -52,6 +53,7 @@ export function RespondStepper({
   allContributions,
   suggestions,
   profile,
+  statusCounts = {},
 }: RespondStepperProps) {
   const { toast } = useToast()
   const [isPending, startTransition] = useTransition()
@@ -94,10 +96,12 @@ export function RespondStepper({
     setCurrentStep((s) => s + 1)
   }
   function goPrev() {
+    setSubmitted(false)
     setDirection('prev')
     setCurrentStep((s) => s - 1)
   }
   function goTo(n: number) {
+    setSubmitted(false)
     setDirection(n > currentStep ? 'next' : 'prev')
     setCurrentStep(n)
   }
@@ -106,9 +110,10 @@ export function RespondStepper({
 
   // STEP 1 — Présence
   const step1Content = (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2.5">
       {STATUS_OPTIONS.map((opt) => {
         const isActive = status === opt.value
+        const count = statusCounts[opt.value] ?? 0
         return (
           <button
             key={opt.value}
@@ -116,7 +121,7 @@ export function RespondStepper({
             onClick={() => setStatus(opt.value)}
             aria-pressed={isActive}
             className={cn(
-              'flex items-center gap-4 w-full px-4 py-3.5 rounded-[var(--radius-lg)] border text-left transition-ui',
+              'flex items-center gap-4 w-full px-4 py-4 rounded-[var(--radius-lg)] border text-left transition-ui',
               isActive
                 ? 'border-[var(--color-accent)] bg-[var(--color-accent-muted)]'
                 : 'border-[var(--color-border)] bg-[var(--color-surface-elevated)] hover:border-[var(--color-border-strong)]'
@@ -134,7 +139,7 @@ export function RespondStepper({
             </span>
             <div className="flex-1 min-w-0">
               <p className={cn(
-                'text-sm font-medium',
+                'text-sm font-semibold',
                 isActive ? 'text-[var(--color-text)]' : 'text-[var(--color-text-muted)]'
               )}>
                 {opt.label}
@@ -143,6 +148,18 @@ export function RespondStepper({
                 {opt.sub}
               </p>
             </div>
+            {count > 0 && (
+              <span
+                className={cn(
+                  'shrink-0 text-xs font-medium px-2 py-0.5 rounded-full tabular',
+                  isActive
+                    ? 'bg-[var(--color-accent)] text-[var(--color-accent-fg)]'
+                    : 'bg-[var(--color-surface-muted)] text-[var(--color-text-faint)] border border-[var(--color-border)]'
+                )}
+              >
+                {count}
+              </span>
+            )}
           </button>
         )
       })}
@@ -529,6 +546,22 @@ export function RespondStepper({
 
   const isNoteStep = steps[currentStep]?.id === 'note'
 
+  const confirmedButton = (
+    <div
+      className="flex items-center gap-2 h-11 px-6 text-sm font-medium rounded-[var(--radius-md)] border"
+      style={{
+        borderColor: 'var(--color-accent)',
+        background: 'var(--color-accent-muted)',
+        color: 'var(--color-accent)',
+      }}
+    >
+      <svg className="h-4 w-4 shrink-0" viewBox="0 0 16 16" fill="none" aria-hidden>
+        <path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      {isUpdate ? 'Réponse mise à jour' : 'Réponse confirmée'}
+    </div>
+  )
+
   return (
     <CardStepper
       steps={steps}
@@ -542,6 +575,7 @@ export function RespondStepper({
       submitLabel={isUpdate ? 'Mettre à jour' : 'Confirmer ma réponse'}
       isSubmitting={isPending}
       nextDisabled={false}
+      submitButton={submitted ? confirmedButton : undefined}
     />
   )
 }

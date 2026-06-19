@@ -25,6 +25,18 @@ export function normalizeItemName(name: string): string {
   return NORMALIZATION_MAP[lower] ?? lower
 }
 
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+// Vérifie si `needle` apparaît comme mot(s) entier(s) dans `haystack` (pas comme sous-chaîne d'un autre mot)
+function isWordLevelMatch(a: string, b: string): boolean {
+  if (a === b) return true
+  const wordBoundary = (needle: string) =>
+    new RegExp(`(?:^|[\\s\\-\\/,])${escapeRegex(needle)}(?:[\\s\\-\\/,]|$)`)
+  return wordBoundary(b).test(a) || wordBoundary(a).test(b)
+}
+
 export function detectDuplicates(
   contributions: Array<Contribution & { contributor_name: string }>,
   currentName: string,
@@ -32,14 +44,14 @@ export function detectDuplicates(
   excludeParticipantId?: string
 ): string[] {
   const normalized = normalizeItemName(currentName)
-  if (!normalized || normalized.length < 2) return []
+  if (!normalized || normalized.length < 3) return []
 
   return contributions
     .filter((c) => {
       if (excludeParticipantId && c.participant_id === excludeParticipantId) return false
       if (c.category !== currentCategory) return false
       const cNorm = normalizeItemName(c.name)
-      return cNorm === normalized || cNorm.includes(normalized) || normalized.includes(cNorm)
+      return isWordLevelMatch(normalized, cNorm)
     })
     .map((c) => c.contributor_name)
     .filter((v, i, a) => a.indexOf(v) === i)

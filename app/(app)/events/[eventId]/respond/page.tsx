@@ -15,6 +15,7 @@ import type {
   EventComment,
   Profile,
 } from '@/types'
+import { CONTRIBUTION_CATEGORIES } from '@/types'
 import type { ContributionSuggestion } from '@/components/contributions/contribution-form'
 
 export const metadata: Metadata = { title: 'Ma réponse' }
@@ -84,6 +85,7 @@ export default async function RespondPage({
     { data: commentsRaw },
     { data: pastContribsRaw },
     { data: profileRaw },
+    { data: allResponsesRaw },
   ] = await Promise.all([
     supabase.from('participant_responses').select('*').eq('participant_id', participant.id).single(),
     supabase.from('contributions').select('*').eq('participant_id', participant.id).order('created_at', { ascending: false }),
@@ -100,12 +102,18 @@ export default async function RespondPage({
       .order('created_at', { ascending: false })
       .limit(50),
     supabase.from('profiles').select('*').eq('id', user.id).single(),
+    supabase.from('participant_responses').select('status').eq('event_id', eventId),
   ])
 
   const response         = responseRaw as ParticipantResponse | null
   const myContributions  = (myContributionsRaw ?? []) as Contribution[]
   const allContributions = (allContributionsRaw ?? []) as Contribution[]
   const profile          = profileRaw as Profile | null
+
+  const statusCounts = ((allResponsesRaw ?? []) as Array<{ status: string }>).reduce(
+    (acc, r) => { acc[r.status] = (acc[r.status] ?? 0) + 1; return acc },
+    {} as Record<string, number>
+  )
 
   // Réactions
   const contributionIds = allContributions.map((c) => c.id)
@@ -217,6 +225,7 @@ export default async function RespondPage({
             allContributions={contribsWithNames}
             suggestions={suggestions}
             profile={profile}
+            statusCounts={statusCounts}
           />
         </section>
       )}
@@ -232,16 +241,31 @@ export default async function RespondPage({
             {othersContribs.map((c, i) => {
               const contribReactions = reactions.filter((r) => r.contribution_id === c.id)
               const userLiked = contribReactions.some((r) => r.user_id === user.id)
+              const catLabel = CONTRIBUTION_CATEGORIES.find((cat) => cat.value === c.category)?.label
               return (
                 <div
                   key={c.id}
-                  className={`flex items-start justify-between gap-3 px-4 py-3${i > 0 ? ' border-t' : ''}`}
+                  className={`flex items-center gap-3 px-4 py-3${i > 0 ? ' border-t' : ''}`}
                   style={i > 0 ? { borderColor: 'var(--color-border)' } : undefined}
                 >
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium leading-snug" style={{ color: 'var(--color-text)' }}>
-                      {c.name}
-                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium leading-snug" style={{ color: 'var(--color-text)' }}>
+                        {c.name}
+                      </p>
+                      {catLabel && (
+                        <span
+                          className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full border"
+                          style={{
+                            borderColor: 'var(--color-border)',
+                            background: 'var(--color-surface-muted)',
+                            color: 'var(--color-text-faint)',
+                          }}
+                        >
+                          {catLabel}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-faint)' }}>
                       {c.contributor_name}
                       {c.quantity ? <span className="mx-1">·</span> : null}

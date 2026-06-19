@@ -31,11 +31,22 @@ export default async function ManageEventPage({
     .from('events')
     .select('*')
     .eq('id', eventId)
-    .eq('organizer_id', user.id)
     .single()
 
   if (!eventRaw) notFound()
   const event = eventRaw as Event
+  const isEventOrganizer = event.organizer_id === user.id
+
+  if (!isEventOrganizer) {
+    const { data: coOrgCheck } = await supabase
+      .from('event_participants')
+      .select('id')
+      .eq('event_id', eventId)
+      .eq('user_id', user.id)
+      .eq('is_co_organizer', true)
+      .single()
+    if (!coOrgCheck) notFound()
+  }
 
   const [{ data: rawParticipants }, { data: rawComments }] = await Promise.all([
     supabase
@@ -96,6 +107,7 @@ export default async function ManageEventPage({
         participants={participants}
         stats={stats}
         comments={comments}
+        isOrganizer={isEventOrganizer}
       />
     </PageWrapper>
   )

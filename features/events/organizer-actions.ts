@@ -25,7 +25,18 @@ async function getOrganizerDb(eventId: string): Promise<{ db: any; userId: strin
     .eq('organizer_id', user.id)
     .single()
 
-  if (!event) return { error: "Événement introuvable ou accès refusé." }
+  if (!event) {
+    // Vérifier si co-organisateur
+    const { data: coOrg } = await db
+      .from('event_participants')
+      .select('id')
+      .eq('event_id', eventId)
+      .eq('user_id', user.id)
+      .eq('is_co_organizer', true)
+      .single()
+
+    if (!coOrg) return { error: "Événement introuvable ou accès refusé." }
+  }
 
   return { db, userId: user.id }
 }
@@ -305,6 +316,37 @@ export async function reassignContribution(
     .eq('event_id', eventId)
 
   if (error) return { error: 'Erreur lors de la réassignation.' }
+
+  revalidatePath(`/events/${eventId}/manage`)
+  return { success: true }
+}
+
+export async function setCoOrganizer(
+  participantId: string,
+  eventId: string,
+  value: boolean
+): Promise<OrganizerActionState> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = await createClient() as any
+  const { data: { user } } = await db.auth.getUser()
+  if (!user) return { error: 'Non authentifié.' }
+
+  // Seul l'organisateur principal peut gérer les co-organisateurs
+  const { data: event } = await db
+    .from('events')
+    .select('id')
+    .eq('id', eventId)
+    .eq('organizer_id', user.id)
+    .single()
+  if (!event) return { error: "Accès refusé. Seul l'organisateur peut gérer les co-organisateurs." }
+
+  const { error } = await db
+    .from('event_participants')
+    .update({ is_co_organizer: value })
+    .eq('id', participantId)
+    .eq('event_id', eventId)
+
+  if (error) return { error: 'Erreur lors de la mise à jour.' }
 
   revalidatePath(`/events/${eventId}/manage`)
   return { success: true }
