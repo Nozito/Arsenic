@@ -107,6 +107,7 @@ export default async function ManageEventPage({
         participants={participants}
         stats={stats}
         comments={comments}
+        currentUserId={user.id}
         isOrganizer={isEventOrganizer}
       />
     </PageWrapper>

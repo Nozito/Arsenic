@@ -112,7 +112,8 @@ export function CardStepper({
           {isLastStep ? (
             submitButton ?? (
               <button
-                type="submit"
+                type="button"
+                onClick={onNext}
                 disabled={isSubmitting || nextDisabled}
                 className={cn(
                   'h-11 px-8 text-sm font-medium rounded-[var(--radius-md)]',

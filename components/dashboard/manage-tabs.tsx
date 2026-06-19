@@ -8,6 +8,7 @@ import { InlineConfirm } from '@/components/ui/inline-confirm'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ShareBlock } from '@/components/ui/share-block'
 import { EventEditPanel } from '@/components/dashboard/event-edit-panel'
+import { EventComments } from '@/components/comments/event-comments'
 import { useToast } from '@/components/ui/toast'
 import {
   removeParticipant,
@@ -34,13 +35,14 @@ import type {
 } from '@/types'
 import { cn } from '@/utils/cn'
 
-type TabId = 'synthese' | 'contributions' | 'participants' | 'allergenes' | 'partage' | 'parametres'
+type TabId = 'synthese' | 'contributions' | 'participants' | 'allergenes' | 'discussion' | 'partage' | 'parametres'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'synthese',       label: 'Synthèse' },
   { id: 'contributions',  label: 'Contributions' },
   { id: 'participants',   label: 'Participants' },
   { id: 'allergenes',     label: 'Allergènes' },
+  { id: 'discussion',     label: 'Discussion' },
   { id: 'partage',        label: 'Partage' },
   { id: 'parametres',     label: 'Paramètres' },
 ]
@@ -50,10 +52,11 @@ interface ManageTabsProps {
   participants: ParticipantWithResponseAndContributions[]
   stats: DashboardStats
   comments: EventComment[]
+  currentUserId: string
   isOrganizer: boolean
 }
 
-export function ManageTabs({ event, participants, stats, comments, isOrganizer }: ManageTabsProps) {
+export function ManageTabs({ event, participants, stats, comments, currentUserId, isOrganizer }: ManageTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>('synthese')
   const allContribs: Contribution[] = participants.flatMap((p) => p.contributions)
   const attending = participants.filter((p) => p.response?.status === 'attending')
@@ -124,6 +127,19 @@ export function ManageTabs({ event, participants, stats, comments, isOrganizer }
         )}
         {activeTab === 'allergenes' && (
           <AllergenesTab participants={participants} />
+        )}
+        {activeTab === 'discussion' && (
+          <div
+            className="rounded-[var(--radius-lg)] border overflow-hidden"
+            style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-elevated)' }}
+          >
+            <EventComments
+              eventId={event.id}
+              currentUserId={currentUserId}
+              isOrganizer={isOrganizer}
+              initialComments={comments}
+            />
+          </div>
         )}
         {activeTab === 'partage' && (
           <PartageTab event={event} />
